@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from "recharts";
 
 const INITIAL_DATA = [
@@ -37,44 +37,117 @@ function fmt(n) {
   return (n >= 0 ? "+" : "") + n.toLocaleString("ko-KR") + "원";
 }
 function fmtAbs(n) { return (n || 0).toLocaleString("ko-KR") + "원"; }
-function formatMonthShort(m) { const [, mo] = m.split("-"); return `${mo}월`; }
+function formatMonthShort(m) { const [, mo] = m.split("-"); return `${parseInt(mo)}월`; }
 function formatMonthFull(m) { const [y, mo] = m.split("-"); return `${y}년 ${parseInt(mo)}월`; }
 
-function SwipeRow({ label, value, onDelete, inputStyle, onChange }) {
-  const [offsetX, setOffsetX] = useState(0);
-  const startX = useRef(null);
+// 전역 스와이프 상태 관리
+let globalOpenKey = null;
+const listeners = new Set();
+function setGlobalOpen(key) {
+  globalOpenKey = key;
+  listeners.forEach(fn => fn(key));
+}
 
-  function onTouchStart(e) { startX.current = e.touches[0].clientX; }
+function SwipeRow({ rowKey, label, value, onDelete, onChange }) {
+  const [offsetX, setOffsetX] = useState(0);
+  const [open, setOpen] = useState(false);
+  const startX = useRef(null);
+  const startY = useRef(null);
+  const rowRef = useRef(null);
+
+  useEffect(() => {
+    function onGlobalChange(key) {
+      if (key !== rowKey && open) {
+        setOffsetX(0);
+        setOpen(false);
+      }
+    }
+    listeners.add(onGlobalChange);
+    return () => listeners.delete(onGlobalChange);
+  }, [rowKey, open]);
+
+  function onTouchStart(e) {
+    startX.current = e.touches[0].clientX;
+    startY.current = e.touches[0].clientY;
+  }
   function onTouchMove(e) {
     if (startX.current === null) return;
     const dx = e.touches[0].clientX - startX.current;
-    if (dx < 0) setOffsetX(Math.max(dx, -72));
+    const dy = Math.abs(e.touches[0].clientY - startY.current);
+    if (dy > 10) return; // 세로 스크롤이면 무시
+    if (dx < 0) {
+      e.preventDefault();
+      setOffsetX(Math.max(dx, -72));
+    } else if (open && dx > 0) {
+      e.preventDefault();
+      setOffsetX(Math.min(dx - 72, 0));
+    }
   }
   function onTouchEnd() {
-    if (offsetX < -36) setOffsetX(-72);
-    else setOffsetX(0);
+    const threshold = -36;
+    if (offsetX < threshold) {
+      setOffsetX(-72);
+      setOpen(true);
+      setGlobalOpen(rowKey);
+    } else {
+      setOffsetX(0);
+      setOpen(false);
+      setGlobalOpen(null);
+    }
     startX.current = null;
   }
-  function reset() { setOffsetX(0); }
+  function handleInputFocus() {
+    if (open) {
+      setOffsetX(0);
+      setOpen(false);
+      setGlobalOpen(null);
+    }
+  }
+
+  const inputStyle = {
+    background: "#111827",
+    border: "1px solid #2d3748",
+    color: "#e2e8f0",
+    borderRadius: 7,
+    padding: "8px 10px",
+    fontSize: 15,
+    textAlign: "right",
+    outline: "none",
+    flex: 1,
+    minWidth: 0,
+    WebkitAppearance: "none",
+  };
 
   return (
-    <div style={{ position: "relative", overflow: "hidden", borderRadius: 7, marginBottom: 4 }}>
-      <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 72, background: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center" }}>
-        <button onClick={onDelete} style={{ background: "none", border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>삭제</button>
+    <div ref={rowRef} style={{ position: "relative", overflow: "hidden", borderRadius: 7, marginBottom: 4 }}>
+      {/* 삭제 버튼 */}
+      <div style={{
+        position: "absolute", right: 0, top: 0, bottom: 0, width: 72,
+        background: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center",
+      }}>
+        <button onClick={onDelete} style={{ background: "none", border: "none", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>삭제</button>
       </div>
+      {/* 행 */}
       <div
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", background: "#1e293b", transform: `translateX(${offsetX}px)`, transition: startX.current === null ? "transform 0.2s" : "none" }}
+        style={{
+          display: "flex", alignItems: "center", gap: 8, padding: "4px 0",
+          background: "#1e293b",
+          transform: `translateX(${offsetX}px)`,
+          transition: startX.current === null ? "transform 0.2s ease" : "none",
+          touchAction: "pan-y",
+        }}
       >
-        <span style={{ fontSize: 13, color: "#94a3b8", minWidth: 72, flexShrink: 0 }}>{label}</span>
+        <span style={{ fontSize: 13, color: "#94a3b8", width: 68, flexShrink: 0 }}>{label}</span>
         <input
           type="number"
+          inputMode="numeric"
           value={value ?? ""}
           placeholder="0"
           onChange={onChange}
-          onFocus={reset}
+          onFocus={handleInputFocus}
           style={inputStyle}
         />
       </div>
@@ -179,60 +252,59 @@ export default function App() {
 
   const diffColor = !sel.diff ? "#64748b" : sel.diff >= 0 ? "#34d399" : "#f87171";
 
-  const S = {
-    page: { minHeight: "100vh", background: "#0a0f1e", color: "#e2e8f0", fontFamily: "'Noto Sans KR', sans-serif", maxWidth: 480, margin: "0 auto" },
-    header: { background: "linear-gradient(180deg,#0f172a,#0a0f1e)", borderBottom: "1px solid #1e293b", padding: "20px 16px 0" },
-    tabBtn: (active) => ({ padding: "8px 18px", fontSize: 13, border: "none", cursor: "pointer", background: active ? "#1e293b" : "transparent", color: active ? "#60a5fa" : "#64748b", borderRadius: "8px 8px 0 0", fontWeight: active ? 700 : 400, borderBottom: active ? "2px solid #60a5fa" : "2px solid transparent" }),
-    card: { background: "#1e293b", borderRadius: 12, padding: "12px 14px", border: "1px solid #2d3748", marginBottom: 8 },
-    input: { background: "#111827", border: "1px solid #2d3748", color: "#e2e8f0", borderRadius: 7, padding: "7px 10px", fontSize: 14, textAlign: "right", outline: "none", width: "100%", boxSizing: "border-box" },
-    addBtn: { background: "none", border: "1px dashed #334155", color: "#64748b", borderRadius: 7, padding: "6px 12px", fontSize: 12, cursor: "pointer", width: "100%", marginTop: 6 },
-    monthBtn: (active) => ({ padding: "5px 12px", borderRadius: 16, border: "none", cursor: "pointer", whiteSpace: "nowrap", background: active ? "#3b82f6" : "#1e293b", color: active ? "#fff" : "#64748b", fontWeight: active ? 700 : 400, fontSize: 12 }),
-  };
+  const cardStyle = { background: "#1e293b", borderRadius: 12, padding: "12px 14px", border: "1px solid #2d3748", marginBottom: 8 };
+  const inputBase = { background: "#111827", border: "1px solid #2d3748", color: "#e2e8f0", borderRadius: 7, padding: "8px 10px", fontSize: 15, outline: "none", WebkitAppearance: "none" };
+  const monthBtnStyle = (active) => ({ padding: "6px 14px", borderRadius: 16, border: "none", cursor: "pointer", whiteSpace: "nowrap", background: active ? "#3b82f6" : "#1e293b", color: active ? "#fff" : "#64748b", fontWeight: active ? 700 : 400, fontSize: 13, flexShrink: 0 });
 
   return (
-    <div style={S.page}>
-      <div style={S.header}>
+    <div style={{ minHeight: "100vh", background: "#0a0f1e", color: "#e2e8f0", fontFamily: "'Noto Sans KR', sans-serif", maxWidth: 480, margin: "0 auto", overflowX: "hidden" }}>
+
+      {/* Header */}
+      <div style={{ background: "linear-gradient(180deg,#0f172a,#0a0f1e)", borderBottom: "1px solid #1e293b", padding: "20px 16px 0" }}>
         <div style={{ fontSize: 10, color: "#4b5563", letterSpacing: 3, marginBottom: 2 }}>PERSONAL FINANCE</div>
         <div style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 16 }}>자산 트래커</div>
         <div style={{ display: "flex" }}>
           {[["detail","월별 상세"],["history","전체 히스토리"]].map(([v,l]) => (
-            <button key={v} onClick={() => setView(v)} style={S.tabBtn(view===v)}>{l}</button>
+            <button key={v} onClick={() => setView(v)} style={{ padding: "8px 18px", fontSize: 13, border: "none", cursor: "pointer", background: view===v ? "#1e293b" : "transparent", color: view===v ? "#60a5fa" : "#64748b", borderRadius: "8px 8px 0 0", fontWeight: view===v ? 700 : 400, borderBottom: view===v ? "2px solid #60a5fa" : "2px solid transparent" }}>
+              {l}
+            </button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding: "12px 16px" }}>
+      <div style={{ padding: "12px 16px", boxSizing: "border-box", width: "100%" }}>
+
         {view === "detail" && (
           <>
             {/* Month Tabs */}
-            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 10 }}>
+            <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 10, WebkitOverflowScrolling: "touch" }}>
               {sortedIndices.map(i => (
-                <button key={data[i].month} onClick={() => setSelectedIdx(i)} style={S.monthBtn(i===selectedIdx)}>
+                <button key={data[i].month} onClick={() => setSelectedIdx(i)} style={monthBtnStyle(i===selectedIdx)}>
                   {formatMonthShort(data[i].month)}
                 </button>
               ))}
-              <button onClick={() => setShowAddMonth(v => !v)} style={{ ...S.monthBtn(false), border: "1px dashed #334155" }}>+</button>
+              <button onClick={() => setShowAddMonth(v => !v)} style={{ ...monthBtnStyle(false), border: "1px dashed #334155" }}>+</button>
             </div>
 
             {showAddMonth && (
-              <div style={{ ...S.card, display: "flex", gap: 6, alignItems: "center" }}>
+              <div style={{ ...cardStyle, display: "flex", gap: 6, alignItems: "center" }}>
                 <input type="month" value={newMonth} onChange={e => setNewMonth(e.target.value)}
-                  style={{ ...S.input, textAlign: "left", flex: 1 }} />
-                <button onClick={addMonth} style={{ background: "#3b82f6", color: "#fff", border: "none", borderRadius: 7, padding: "7px 12px", cursor: "pointer", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>추가</button>
-                <button onClick={() => setShowAddMonth(false)} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "7px 10px", cursor: "pointer", fontSize: 13 }}>✕</button>
+                  style={{ ...inputBase, textAlign: "left", flex: 1, minWidth: 0 }} />
+                <button onClick={addMonth} style={{ background: "#3b82f6", color: "#fff", border: "none", borderRadius: 7, padding: "8px 12px", cursor: "pointer", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>추가</button>
+                <button onClick={() => setShowAddMonth(false)} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "8px 10px", cursor: "pointer", fontSize: 13 }}>✕</button>
               </div>
             )}
 
             {/* Summary */}
-            <div style={S.card}>
+            <div style={cardStyle}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <div style={{ fontSize: 10, color: "#64748b", letterSpacing: 1, marginBottom: 4 }}>전월 대비</div>
-                  <div style={{ fontSize: 20, fontWeight: 800, color: diffColor }}>{sel.diff !== null ? fmt(sel.diff) : "-"}</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, color: diffColor }}>{sel.diff !== null ? fmt(sel.diff) : "-"}</div>
                   <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{formatMonthFull(selected.month)} 기준</div>
                 </div>
                 <button onClick={() => setSummaryOpen(v => !v)}
-                  style={{ background: "#334155", border: "none", color: "#94a3b8", borderRadius: 7, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>
+                  style={{ background: "#334155", border: "none", color: "#94a3b8", borderRadius: 7, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                   {summaryOpen ? "접기 ▲" : "자세히 ▼"}
                 </button>
               </div>
@@ -252,38 +324,44 @@ export default function App() {
               )}
             </div>
 
-            {/* Accounts - 구분 없이 한 리스트 */}
-            <div style={{ ...S.card, padding: "12px 14px" }}>
+            {/* Accounts */}
+            <div style={{ ...cardStyle, padding: "12px 14px" }}>
               {allKeys.map(key => (
-                <SwipeRow key={key} label={key} value={selected.accounts[key]}
+                <SwipeRow
+                  key={key}
+                  rowKey={`${selectedIdx}-${key}`}
+                  label={key}
+                  value={selected.accounts[key]}
                   onDelete={() => deleteAccount(key)}
                   onChange={e => updateAccount(key, e.target.value)}
-                  inputStyle={S.input} />
+                />
               ))}
 
               {addingItem ? (
                 <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                  <input autoFocus placeholder="항목 이름" value={newItemName} onChange={e => setNewItemName(e.target.value)}
+                  <input autoFocus placeholder="항목 이름" value={newItemName}
+                    onChange={e => setNewItemName(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && addAccount()}
-                    style={{ ...S.input, textAlign: "left", flex: 1 }} />
-                  <button onClick={addAccount} style={{ background: "#3b82f6", color: "#fff", border: "none", borderRadius: 7, padding: "7px 12px", cursor: "pointer", fontWeight: 700 }}>추가</button>
-                  <button onClick={() => { setAddingItem(false); setNewItemName(""); }} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "7px 10px", cursor: "pointer" }}>✕</button>
+                    style={{ ...inputBase, textAlign: "left", flex: 1, minWidth: 0 }} />
+                  <button onClick={addAccount} style={{ background: "#3b82f6", color: "#fff", border: "none", borderRadius: 7, padding: "8px 12px", cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>추가</button>
+                  <button onClick={() => { setAddingItem(false); setNewItemName(""); }} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "8px 10px", cursor: "pointer" }}>✕</button>
                 </div>
               ) : (
-                <button onClick={() => setAddingItem(true)} style={S.addBtn}>+ 항목 추가</button>
+                <button onClick={() => setAddingItem(true)} style={{ background: "none", border: "1px dashed #334155", color: "#64748b", borderRadius: 7, padding: "6px 12px", fontSize: 12, cursor: "pointer", width: "100%", marginTop: 6 }}>+ 항목 추가</button>
               )}
 
               <div style={{ borderTop: "1px solid #2d3748", margin: "10px 0" }} />
               <div style={{ fontSize: 10, color: "#64748b", marginBottom: 6 }}>메모</div>
               <input type="text" value={selected.memo || ""} onChange={e => updateMemo(e.target.value)}
-                placeholder="특이사항 입력" style={{ ...S.input, textAlign: "left" }} />
+                placeholder="특이사항 입력"
+                style={{ ...inputBase, textAlign: "left", width: "100%", boxSizing: "border-box" }} />
             </div>
           </>
         )}
 
         {view === "history" && (
           <>
-            <div style={{ ...S.card, marginBottom: 10 }}>
+            <div style={{ ...cardStyle, marginBottom: 10 }}>
               <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>총 자산 추이</div>
               <ResponsiveContainer width="100%" height={160}>
                 <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -303,7 +381,7 @@ export default function App() {
               const c = computed[i];
               return (
                 <div key={d.month} onClick={() => { setSelectedIdx(i); setView("detail"); }}
-                  style={{ ...S.card, cursor: "pointer" }}>
+                  style={{ ...cardStyle, cursor: "pointer" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", marginBottom: 2 }}>{formatMonthFull(d.month)}</div>
