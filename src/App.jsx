@@ -40,7 +40,6 @@ function fmtAbs(n) { return (n || 0).toLocaleString("ko-KR") + "원"; }
 function formatMonthShort(m) { const [, mo] = m.split("-"); return `${parseInt(mo)}월`; }
 function formatMonthFull(m) { const [y, mo] = m.split("-"); return `${y}년 ${parseInt(mo)}월`; }
 
-// 전역 스와이프 상태 관리
 let globalOpenKey = null;
 const listeners = new Set();
 function setGlobalOpen(key) {
@@ -53,7 +52,6 @@ function SwipeRow({ rowKey, label, value, onDelete, onChange }) {
   const [open, setOpen] = useState(false);
   const startX = useRef(null);
   const startY = useRef(null);
-  const rowRef = useRef(null);
 
   useEffect(() => {
     function onGlobalChange(key) {
@@ -74,73 +72,31 @@ function SwipeRow({ rowKey, label, value, onDelete, onChange }) {
     if (startX.current === null) return;
     const dx = e.touches[0].clientX - startX.current;
     const dy = Math.abs(e.touches[0].clientY - startY.current);
-    if (dy > 10) return; // 세로 스크롤이면 무시
-    if (dx < 0) {
-      e.preventDefault();
-      setOffsetX(Math.max(dx, -72));
-    } else if (open && dx > 0) {
-      e.preventDefault();
-      setOffsetX(Math.min(dx - 72, 0));
-    }
+    if (dy > 10) return;
+    if (dx < 0) { e.preventDefault(); setOffsetX(Math.max(dx, -72)); }
+    else if (open && dx > 0) { e.preventDefault(); setOffsetX(Math.min(dx - 72, 0)); }
   }
   function onTouchEnd() {
-    const threshold = -36;
-    if (offsetX < threshold) {
-      setOffsetX(-72);
-      setOpen(true);
-      setGlobalOpen(rowKey);
-    } else {
-      setOffsetX(0);
-      setOpen(false);
-      setGlobalOpen(null);
-    }
+    if (offsetX < -36) { setOffsetX(-72); setOpen(true); setGlobalOpen(rowKey); }
+    else { setOffsetX(0); setOpen(false); setGlobalOpen(null); }
     startX.current = null;
   }
   function handleInputFocus() {
-    if (open) {
-      setOffsetX(0);
-      setOpen(false);
-      setGlobalOpen(null);
-    }
+    if (open) { setOffsetX(0); setOpen(false); setGlobalOpen(null); }
   }
 
-  const inputStyle = {
-    background: "#111827",
-    border: "1px solid #2d3748",
-    color: "#e2e8f0",
-    borderRadius: 7,
-    padding: "8px 10px",
-    fontSize: 15,
-    textAlign: "right",
-    outline: "none",
-    flex: 1,
-    minWidth: 0,
-    WebkitAppearance: "none",
-  };
-
   return (
-    <div ref={rowRef} style={{ position: "relative", overflow: "hidden", borderRadius: 7, marginBottom: 4 }}>
-      {/* 삭제 버튼 */}
-      <div style={{
-        position: "absolute", right: 0, top: 0, bottom: 0, width: 72,
-        background: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center",
-      }}>
+    <div style={{ position: "relative", overflow: "hidden", borderRadius: 7, marginBottom: 4, width: "100%" }}>
+      <div style={{ position: "absolute", right: 0, top: 0, bottom: 0, width: 72, background: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <button onClick={onDelete} style={{ background: "none", border: "none", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>삭제</button>
       </div>
-      {/* 행 */}
       <div
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        style={{
-          display: "flex", alignItems: "center", gap: 8, padding: "4px 0",
-          background: "#1e293b",
-          transform: `translateX(${offsetX}px)`,
-          transition: startX.current === null ? "transform 0.2s ease" : "none",
-          touchAction: "pan-y",
-        }}
+        style={{ display: "flex", alignItems: "center", gap: 8, padding: "4px 0", background: "#1e293b", transform: `translateX(${offsetX}px)`, transition: startX.current === null ? "transform 0.2s ease" : "none", touchAction: "pan-y", width: "100%", boxSizing: "border-box" }}
       >
-        <span style={{ fontSize: 13, color: "#94a3b8", width: 68, flexShrink: 0 }}>{label}</span>
+        <span style={{ fontSize: 13, color: "#94a3b8", width: 64, flexShrink: 0 }}>{label}</span>
         <input
           type="number"
           inputMode="numeric"
@@ -148,7 +104,7 @@ function SwipeRow({ rowKey, label, value, onDelete, onChange }) {
           placeholder="0"
           onChange={onChange}
           onFocus={handleInputFocus}
-          style={inputStyle}
+          style={{ background: "#111827", border: "1px solid #2d3748", color: "#e2e8f0", borderRadius: 7, padding: "8px 10px", fontSize: 15, textAlign: "right", outline: "none", flex: 1, minWidth: 0, width: "100%", boxSizing: "border-box", WebkitAppearance: "none", MozAppearance: "textfield" }}
         />
       </div>
     </div>
@@ -161,9 +117,7 @@ const CustomTooltip = ({ active, payload, label }) => {
     return (
       <div style={{ background: "#0f172a", border: "1px solid #334155", borderRadius: 8, padding: "8px 12px" }}>
         <div style={{ fontSize: 11, color: "#64748b", marginBottom: 4 }}>{label}</div>
-        <div style={{ fontSize: 13, fontWeight: 700, color: val >= 0 ? "#34d399" : "#f87171" }}>
-          {val.toLocaleString("ko-KR")}원
-        </div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: val >= 0 ? "#34d399" : "#f87171" }}>{val.toLocaleString("ko-KR")}원</div>
       </div>
     );
   }
@@ -198,8 +152,7 @@ export default function App() {
   const [summaryOpen, setSummaryOpen] = useState(false);
 
   const sortedIndices = useMemo(() =>
-    [...data.map((_, i) => i)].sort((a, b) => data[b].month.localeCompare(data[a].month)),
-    [data]);
+    [...data.map((_, i) => i)].sort((a, b) => data[b].month.localeCompare(data[a].month)), [data]);
 
   const computed = useMemo(() =>
     data.map((d, i) => {
@@ -209,17 +162,14 @@ export default function App() {
     }), [data]);
 
   const chartData = useMemo(() =>
-    data.map((d, i) => ({ label: formatMonthShort(d.month), total: computed[i].total })),
-    [data, computed]);
+    data.map((d, i) => ({ label: formatMonthShort(d.month), total: computed[i].total })), [data, computed]);
 
   const selected = data[selectedIdx];
   const sel = computed[selectedIdx];
   const allKeys = Object.keys(selected.accounts);
 
   function updateAccount(key, val) {
-    setData(prev => prev.map((d, i) =>
-      i === selectedIdx ? { ...d, accounts: { ...d.accounts, [key]: val } } : d
-    ));
+    setData(prev => prev.map((d, i) => i === selectedIdx ? { ...d, accounts: { ...d.accounts, [key]: val } } : d));
   }
   function updateMemo(val) {
     setData(prev => prev.map((d, i) => i === selectedIdx ? { ...d, memo: val } : d));
@@ -233,18 +183,13 @@ export default function App() {
   }
   function addAccount() {
     if (!newItemName.trim()) return;
-    const key = newItemName.trim();
-    setData(prev => prev.map((d, i) =>
-      i === selectedIdx ? { ...d, accounts: { ...d.accounts, [key]: "" } } : d
-    ));
+    setData(prev => prev.map((d, i) => i === selectedIdx ? { ...d, accounts: { ...d.accounts, [newItemName.trim()]: "" } } : d));
     setAddingItem(false); setNewItemName("");
   }
   function addMonth() {
     if (!newMonth || data.find(d => d.month === newMonth)) return;
-    const lastAccounts = data[data.length - 1]?.accounts || {};
-    const emptyAccounts = Object.fromEntries(Object.keys(lastAccounts).map(k => [k, ""]));
-    const sorted = [...data, { month: newMonth, accounts: emptyAccounts, memo: "" }]
-      .sort((a, b) => a.month.localeCompare(b.month));
+    const emptyAccounts = Object.fromEntries(Object.keys(data[data.length - 1]?.accounts || {}).map(k => [k, ""]));
+    const sorted = [...data, { month: newMonth, accounts: emptyAccounts, memo: "" }].sort((a, b) => a.month.localeCompare(b.month));
     setData(sorted);
     setSelectedIdx(sorted.findIndex(d => d.month === newMonth));
     setShowAddMonth(false); setNewMonth("");
@@ -252,59 +197,53 @@ export default function App() {
 
   const diffColor = !sel.diff ? "#64748b" : sel.diff >= 0 ? "#34d399" : "#f87171";
 
-  const cardStyle = { background: "#1e293b", borderRadius: 12, padding: "12px 14px", border: "1px solid #2d3748", marginBottom: 8 };
-  const inputBase = { background: "#111827", border: "1px solid #2d3748", color: "#e2e8f0", borderRadius: 7, padding: "8px 10px", fontSize: 15, outline: "none", WebkitAppearance: "none" };
-  const monthBtnStyle = (active) => ({ padding: "6px 14px", borderRadius: 16, border: "none", cursor: "pointer", whiteSpace: "nowrap", background: active ? "#3b82f6" : "#1e293b", color: active ? "#fff" : "#64748b", fontWeight: active ? 700 : 400, fontSize: 13, flexShrink: 0 });
+  const card = { background: "#1e293b", borderRadius: 12, padding: "12px 14px", border: "1px solid #2d3748", marginBottom: 8, boxSizing: "border-box", width: "100%" };
+  const inputBase = { background: "#111827", border: "1px solid #2d3748", color: "#e2e8f0", borderRadius: 7, padding: "8px 10px", fontSize: 15, outline: "none", boxSizing: "border-box", width: "100%", WebkitAppearance: "none" };
+  const monthBtn = (active) => ({ padding: "6px 14px", borderRadius: 16, border: "none", cursor: "pointer", whiteSpace: "nowrap", background: active ? "#3b82f6" : "#1e293b", color: active ? "#fff" : "#64748b", fontWeight: active ? 700 : 400, fontSize: 13, flexShrink: 0 });
 
   return (
-    <div style={{ minHeight: "100vh", background: "#0a0f1e", color: "#e2e8f0", fontFamily: "'Noto Sans KR', sans-serif", maxWidth: 480, margin: "0 auto", overflowX: "hidden" }}>
+    <div style={{ minHeight: "100vh", background: "#0a0f1e", color: "#e2e8f0", fontFamily: "'Noto Sans KR', sans-serif", width: "100%", maxWidth: 480, margin: "0 auto", overflowX: "hidden", boxSizing: "border-box" }}>
+      <style>{`* { box-sizing: border-box; } input[type=number]::-webkit-inner-spin-button, input[type=number]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; } body { overflow-x: hidden; margin: 0; padding: 0; }`}</style>
 
       {/* Header */}
-      <div style={{ background: "linear-gradient(180deg,#0f172a,#0a0f1e)", borderBottom: "1px solid #1e293b", padding: "20px 16px 0" }}>
+      <div style={{ background: "linear-gradient(180deg,#0f172a,#0a0f1e)", borderBottom: "1px solid #1e293b", padding: "20px 16px 0", width: "100%" }}>
         <div style={{ fontSize: 10, color: "#4b5563", letterSpacing: 3, marginBottom: 2 }}>PERSONAL FINANCE</div>
         <div style={{ fontSize: 20, fontWeight: 800, color: "#f1f5f9", marginBottom: 16 }}>자산 트래커</div>
         <div style={{ display: "flex" }}>
           {[["detail","월별 상세"],["history","전체 히스토리"]].map(([v,l]) => (
-            <button key={v} onClick={() => setView(v)} style={{ padding: "8px 18px", fontSize: 13, border: "none", cursor: "pointer", background: view===v ? "#1e293b" : "transparent", color: view===v ? "#60a5fa" : "#64748b", borderRadius: "8px 8px 0 0", fontWeight: view===v ? 700 : 400, borderBottom: view===v ? "2px solid #60a5fa" : "2px solid transparent" }}>
-              {l}
-            </button>
+            <button key={v} onClick={() => setView(v)} style={{ padding: "8px 18px", fontSize: 13, border: "none", cursor: "pointer", background: view===v ? "#1e293b" : "transparent", color: view===v ? "#60a5fa" : "#64748b", borderRadius: "8px 8px 0 0", fontWeight: view===v ? 700 : 400, borderBottom: view===v ? "2px solid #60a5fa" : "2px solid transparent" }}>{l}</button>
           ))}
         </div>
       </div>
 
-      <div style={{ padding: "12px 16px", boxSizing: "border-box", width: "100%" }}>
-
+      <div style={{ padding: "12px 16px", width: "100%", boxSizing: "border-box" }}>
         {view === "detail" && (
           <>
             {/* Month Tabs */}
             <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 6, marginBottom: 10, WebkitOverflowScrolling: "touch" }}>
               {sortedIndices.map(i => (
-                <button key={data[i].month} onClick={() => setSelectedIdx(i)} style={monthBtnStyle(i===selectedIdx)}>
-                  {formatMonthShort(data[i].month)}
-                </button>
+                <button key={data[i].month} onClick={() => setSelectedIdx(i)} style={monthBtn(i===selectedIdx)}>{formatMonthShort(data[i].month)}</button>
               ))}
-              <button onClick={() => setShowAddMonth(v => !v)} style={{ ...monthBtnStyle(false), border: "1px dashed #334155" }}>+</button>
+              <button onClick={() => setShowAddMonth(v => !v)} style={{ ...monthBtn(false), border: "1px dashed #334155" }}>+</button>
             </div>
 
             {showAddMonth && (
-              <div style={{ ...cardStyle, display: "flex", gap: 6, alignItems: "center" }}>
-                <input type="month" value={newMonth} onChange={e => setNewMonth(e.target.value)}
-                  style={{ ...inputBase, textAlign: "left", flex: 1, minWidth: 0 }} />
+              <div style={{ ...card, display: "flex", gap: 6, alignItems: "center" }}>
+                <input type="month" value={newMonth} onChange={e => setNewMonth(e.target.value)} style={{ ...inputBase, flex: 1 }} />
                 <button onClick={addMonth} style={{ background: "#3b82f6", color: "#fff", border: "none", borderRadius: 7, padding: "8px 12px", cursor: "pointer", fontWeight: 700, fontSize: 13, whiteSpace: "nowrap" }}>추가</button>
                 <button onClick={() => setShowAddMonth(false)} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "8px 10px", cursor: "pointer", fontSize: 13 }}>✕</button>
               </div>
             )}
 
             {/* Summary */}
-            <div style={cardStyle}>
+            <div style={card}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
                   <div style={{ fontSize: 10, color: "#64748b", letterSpacing: 1, marginBottom: 4 }}>전월 대비</div>
                   <div style={{ fontSize: 22, fontWeight: 800, color: diffColor }}>{sel.diff !== null ? fmt(sel.diff) : "-"}</div>
                   <div style={{ fontSize: 11, color: "#475569", marginTop: 2 }}>{formatMonthFull(selected.month)} 기준</div>
                 </div>
-                <button onClick={() => setSummaryOpen(v => !v)}
-                  style={{ background: "#334155", border: "none", color: "#94a3b8", borderRadius: 7, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
+                <button onClick={() => setSummaryOpen(v => !v)} style={{ background: "#334155", border: "none", color: "#94a3b8", borderRadius: 7, padding: "6px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, flexShrink: 0 }}>
                   {summaryOpen ? "접기 ▲" : "자세히 ▼"}
                 </button>
               </div>
@@ -325,43 +264,33 @@ export default function App() {
             </div>
 
             {/* Accounts */}
-            <div style={{ ...cardStyle, padding: "12px 14px" }}>
+            <div style={{ ...card, padding: "12px 14px" }}>
               {allKeys.map(key => (
-                <SwipeRow
-                  key={key}
-                  rowKey={`${selectedIdx}-${key}`}
-                  label={key}
-                  value={selected.accounts[key]}
-                  onDelete={() => deleteAccount(key)}
-                  onChange={e => updateAccount(key, e.target.value)}
-                />
+                <SwipeRow key={key} rowKey={`${selectedIdx}-${key}`} label={key} value={selected.accounts[key]}
+                  onDelete={() => deleteAccount(key)} onChange={e => updateAccount(key, e.target.value)} />
               ))}
-
               {addingItem ? (
                 <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                  <input autoFocus placeholder="항목 이름" value={newItemName}
-                    onChange={e => setNewItemName(e.target.value)}
+                  <input autoFocus placeholder="항목 이름" value={newItemName} onChange={e => setNewItemName(e.target.value)}
                     onKeyDown={e => e.key === "Enter" && addAccount()}
-                    style={{ ...inputBase, textAlign: "left", flex: 1, minWidth: 0 }} />
+                    style={{ ...inputBase, flex: 1 }} />
                   <button onClick={addAccount} style={{ background: "#3b82f6", color: "#fff", border: "none", borderRadius: 7, padding: "8px 12px", cursor: "pointer", fontWeight: 700, whiteSpace: "nowrap" }}>추가</button>
                   <button onClick={() => { setAddingItem(false); setNewItemName(""); }} style={{ background: "#334155", color: "#94a3b8", border: "none", borderRadius: 7, padding: "8px 10px", cursor: "pointer" }}>✕</button>
                 </div>
               ) : (
                 <button onClick={() => setAddingItem(true)} style={{ background: "none", border: "1px dashed #334155", color: "#64748b", borderRadius: 7, padding: "6px 12px", fontSize: 12, cursor: "pointer", width: "100%", marginTop: 6 }}>+ 항목 추가</button>
               )}
-
               <div style={{ borderTop: "1px solid #2d3748", margin: "10px 0" }} />
               <div style={{ fontSize: 10, color: "#64748b", marginBottom: 6 }}>메모</div>
               <input type="text" value={selected.memo || ""} onChange={e => updateMemo(e.target.value)}
-                placeholder="특이사항 입력"
-                style={{ ...inputBase, textAlign: "left", width: "100%", boxSizing: "border-box" }} />
+                placeholder="특이사항 입력" style={{ ...inputBase }} />
             </div>
           </>
         )}
 
         {view === "history" && (
           <>
-            <div style={{ ...cardStyle, marginBottom: 10 }}>
+            <div style={{ ...card, marginBottom: 10 }}>
               <div style={{ fontSize: 11, color: "#64748b", marginBottom: 10 }}>총 자산 추이</div>
               <ResponsiveContainer width="100%" height={160}>
                 <LineChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
@@ -369,19 +298,15 @@ export default function App() {
                   <YAxis hide />
                   <Tooltip content={<CustomTooltip />} />
                   <ReferenceLine y={0} stroke="#334155" strokeDasharray="3 3" />
-                  <Line type="monotone" dataKey="total" stroke="#60a5fa" strokeWidth={2}
-                    dot={{ fill: "#60a5fa", r: 3 }} activeDot={{ r: 5, fill: "#fff" }} />
+                  <Line type="monotone" dataKey="total" stroke="#60a5fa" strokeWidth={2} dot={{ fill: "#60a5fa", r: 3 }} activeDot={{ r: 5, fill: "#fff" }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
-
             <div style={{ fontSize: 11, color: "#475569", marginBottom: 8 }}>전체 월별 요약 (최신순)</div>
             {sortedIndices.map(i => {
-              const d = data[i];
-              const c = computed[i];
+              const d = data[i]; const c = computed[i];
               return (
-                <div key={d.month} onClick={() => { setSelectedIdx(i); setView("detail"); }}
-                  style={{ ...cardStyle, cursor: "pointer" }}>
+                <div key={d.month} onClick={() => { setSelectedIdx(i); setView("detail"); }} style={{ ...card, cursor: "pointer" }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", marginBottom: 2 }}>{formatMonthFull(d.month)}</div>
@@ -389,9 +314,7 @@ export default function App() {
                     </div>
                     <div style={{ textAlign: "right" }}>
                       <div style={{ fontSize: 14, fontWeight: 700, color: c.total >= 0 ? "#34d399" : "#f87171" }}>{fmtAbs(c.total)}</div>
-                      {c.diff !== null && (
-                        <div style={{ fontSize: 11, color: c.diff >= 0 ? "#34d399" : "#f87171", marginTop: 1 }}>{fmt(c.diff)}</div>
-                      )}
+                      {c.diff !== null && <div style={{ fontSize: 11, color: c.diff >= 0 ? "#34d399" : "#f87171", marginTop: 1 }}>{fmt(c.diff)}</div>}
                     </div>
                   </div>
                   {d.memo && <div style={{ fontSize: 10, color: "#475569", marginTop: 4 }}>📝 {d.memo}</div>}
